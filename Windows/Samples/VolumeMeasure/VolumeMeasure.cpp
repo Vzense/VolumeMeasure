@@ -56,13 +56,72 @@ int main(int argc, char *argv[])
 	setMouseCallback(depthImageWindow, on_MouseHandle, nullptr);
 
 	bool domeasure = false;
+	VzVolResult Result = { 0 };
 	for (;;)
 	{
 		VzVolInfo volinfo = { 0 };
 		status = VzVol_GetVolInfo(g_DeviceHandle, &volinfo, domeasure);
 		//cout << "VzVol_GetVolInfo  " << status << endl;
 
-		if (status == VzVolReturnStatus::VzVolRetOK&&volinfo.frame.pFrameData != NULL)
+		if (domeasure)
+		{
+			if (status == VzVolReturnStatus::VzVolRetOK&&volinfo.frame.pFrameData != NULL)
+			{
+				static int index = 0;
+				static float fps = 0;
+				static int64 start = cv::getTickCount();
+
+				int64 current = cv::getTickCount();
+				int64 diff = current - start;
+				index++;
+				if (diff > cv::getTickFrequency())
+				{
+					fps = index * cv::getTickFrequency() / diff;
+					index = 0;
+					start = current;
+				}
+
+				//Display the Depth Image
+				Opencv_Depth(g_Slope, volinfo.frame.height, volinfo.frame.width, volinfo.frame.pFrameData, imageMat);
+				char text[30] = "";
+				sprintf(text, "%.2f", fps);
+				putText(imageMat, text, Point(0, 15), FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
+
+				line(imageMat, Point(volinfo.result.Point0.x, volinfo.result.Point0.y), Point(volinfo.result.Point1.x, volinfo.result.Point1.y), Scalar(0, 255, 255), 2);
+				line(imageMat, Point(volinfo.result.Point1.x, volinfo.result.Point1.y), Point(volinfo.result.Point2.x, volinfo.result.Point2.y), Scalar(0, 255, 255), 2);
+				line(imageMat, Point(volinfo.result.Point2.x, volinfo.result.Point2.y), Point(volinfo.result.Point3.x, volinfo.result.Point3.y), Scalar(0, 255, 255), 2);
+				line(imageMat, Point(volinfo.result.Point3.x, volinfo.result.Point3.y), Point(volinfo.result.Point0.x, volinfo.result.Point0.y), Scalar(0, 255, 255), 2);
+				char textrst[100];
+				Scalar color;
+				if (volinfo.result.type == VzVolObjectType::CUBE)
+				{
+					color = Scalar(255, 255, 255);
+				}
+				else
+				{
+					color = Scalar(0, 0, 0);
+				}
+
+				sprintf(textrst, "L:  %d mm", volinfo.result.length);
+				putText(imageMat, textrst, Point(10, 40), FONT_HERSHEY_DUPLEX, 0.7, color);
+				sprintf(textrst, "W:  %d mm", volinfo.result.width);
+				putText(imageMat, textrst, Point(10, 60), FONT_HERSHEY_DUPLEX, 0.7, color);
+				sprintf(textrst, "H:  %d mm", volinfo.result.height);
+				putText(imageMat, textrst, Point(10, 80), FONT_HERSHEY_DUPLEX, 0.7, color);
+				std::cout << "Measure success: Length- " << volinfo.result.length << " Width- " << volinfo.result.width << " Height- " << volinfo.result.height << endl; ;
+				memcpy(&Result, &volinfo.result, sizeof(VzVolResult));
+				
+				cout << "measure volume success" << endl;
+
+				cv::imshow(depthImageWindow, imageMat);
+			}
+			else if(status == VzVolReturnStatus::VzVolRetCalcVolumeError)
+			{
+				cout << "get frame ok, but measure volume failed . status: " << status << endl;
+			}
+			domeasure = false;
+		}
+		else if(status == VzVolReturnStatus::VzVolRetOK && volinfo.frame.pFrameData != NULL)
 		{
 			static int index = 0;
 			static float fps = 0;
@@ -77,20 +136,17 @@ int main(int argc, char *argv[])
 				index = 0;
 				start = current;
 			}
-
-			//Display the Depth Image
 			Opencv_Depth(g_Slope, volinfo.frame.height, volinfo.frame.width, volinfo.frame.pFrameData, imageMat);
 			char text[30] = "";
 			sprintf(text, "%.2f", fps);
 			putText(imageMat, text, Point(0, 15), FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
-
-			line(imageMat, Point(volinfo.result.Point0.x, volinfo.result.Point0.y), Point(volinfo.result.Point1.x, volinfo.result.Point1.y), Scalar(0, 255, 255), 2);
-			line(imageMat, Point(volinfo.result.Point1.x, volinfo.result.Point1.y), Point(volinfo.result.Point2.x, volinfo.result.Point2.y), Scalar(0, 255, 255), 2);
-			line(imageMat, Point(volinfo.result.Point2.x, volinfo.result.Point2.y), Point(volinfo.result.Point3.x, volinfo.result.Point3.y), Scalar(0, 255, 255), 2);
-			line(imageMat, Point(volinfo.result.Point3.x, volinfo.result.Point3.y), Point(volinfo.result.Point0.x, volinfo.result.Point0.y), Scalar(0, 255, 255), 2);
+			line(imageMat, Point(Result.Point0.x, Result.Point0.y), Point(Result.Point1.x, Result.Point1.y), Scalar(0, 255, 255), 2);
+			line(imageMat, Point(Result.Point1.x, Result.Point1.y), Point(Result.Point2.x, Result.Point2.y), Scalar(0, 255, 255), 2);
+			line(imageMat, Point(Result.Point2.x, Result.Point2.y), Point(Result.Point3.x, Result.Point3.y), Scalar(0, 255, 255), 2);
+			line(imageMat, Point(Result.Point3.x, Result.Point3.y), Point(Result.Point0.x, Result.Point0.y), Scalar(0, 255, 255), 2);
 			char textrst[100];
 			Scalar color;
-			if (volinfo.result.type == VzVolObjectType::CUBE)
+			if (Result.type == VzVolObjectType::CUBE)
 			{
 				color = Scalar(255, 255, 255);
 			}
@@ -98,36 +154,14 @@ int main(int argc, char *argv[])
 			{
 				color = Scalar(0, 0, 0);
 			}
-		 
-			sprintf(textrst, "L:  %d mm", volinfo.result.length);
+
+			sprintf(textrst, "L:  %d mm", Result.length);
 			putText(imageMat, textrst, Point(10, 40), FONT_HERSHEY_DUPLEX, 0.7, color);
-			sprintf(textrst, "W:  %d mm", volinfo.result.width);
+			sprintf(textrst, "W:  %d mm", Result.width);
 			putText(imageMat, textrst, Point(10, 60), FONT_HERSHEY_DUPLEX, 0.7, color);
-			sprintf(textrst, "H:  %d mm", volinfo.result.height);
+			sprintf(textrst, "H:  %d mm", Result.height);
 			putText(imageMat, textrst, Point(10, 80), FONT_HERSHEY_DUPLEX, 0.7, color);
 
-			cv::imshow(depthImageWindow, imageMat);
-		 
-		}
-		else if(status == VzVolReturnStatus::VzVolRetCalcVolumeError)
-		{
-			static int index = 0;
-			static float fps = 0;
-			static int64 start = cv::getTickCount();
-
-			int64 current = cv::getTickCount();
-			int64 diff = current - start;
-			index++;
-			if (diff > cv::getTickFrequency())
-			{
-				fps = index * cv::getTickFrequency() / diff;
-				index = 0;
-				start = current;
-			}
-			Opencv_Depth(g_Slope, volinfo.frame.height, volinfo.frame.width, volinfo.frame.pFrameData, imageMat);
-			char text[30] = "";
-			sprintf(text, "%.2f", fps);
-			putText(imageMat, text, Point(0, 15), FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255));
 			cv::imshow(depthImageWindow, imageMat);
 		}
 		unsigned char key = waitKey(1);
@@ -139,13 +173,14 @@ int main(int argc, char *argv[])
 			if (status != VzVolReturnStatus::VzVolRetOK)
 			{
 				cout << "VzVol_SetBackGround failed! " << status << endl;
+				cout <<"the Angle between camera and measuring surface need < 3.0" << endl;
 			}
 			std::cout << "SetBackGround end!!" << endl;
 		}
 		else if (key == 'D' || key == 'd')
 		{
-			domeasure = !domeasure;
-			cout << "set Measure "<< domeasure << endl;
+			domeasure = true;
+			cout << "measure volume start " << endl;
  		}
 		else if (key == 27)	//ESC Pressed
 		{
@@ -169,6 +204,7 @@ void ShowMenu()
 	cout << "--------------------------------------------------------------------" << endl;
 	cout << "Press following key to set corresponding feature:" << endl;
 	cout << "B/b: SetBackGround" << endl;
+	cout << "D/d: Once Measure" << endl;
 	cout << "Esc: Program quit " << endl;
 	cout << "--------------------------------------------------------------------" << endl;
 	cout << "--------------------------------------------------------------------\n" << endl;
